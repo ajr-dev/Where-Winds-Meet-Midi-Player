@@ -60,7 +60,7 @@ jobs:
 
       - name: Create Release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           gh release create "v${{ github.event.inputs.version || github.ref_name }}" `
             --title "Release v${{ github.event.inputs.version || github.ref_name }}" `
