@@ -12,7 +12,6 @@ This app lets you play music in Where Winds Meet's music minigame! Just add your
 - **Easy to use** - Just drag your MIDI files and click play
 - **Smart music selection** - Automatically adjusts notes to fit the game's instrument
 - **Queue system** - Build your playlist and play songs in order
-- **Global hotkeys** - Control playback even when the game is focused
 - **Real-time progress** - See exactly where you are in the song
 
 ## How to Use
@@ -40,13 +39,6 @@ This app lets you play music in Where Winds Meet's music minigame! Just add your
 - Use the play/pause button at the bottom
 - Click the + button to add songs to queue
 - Drag the top bar to move the window around
-
-**Global hotkeys (work even when game is focused):**
-- `Scroll Lock` - Play/Pause
-- `End` - Stop playback
-- `Ctrl + N` - Next song
-- `Ctrl + P` - Previous song
-- `Ctrl + L` - Toggle loop mode
 
 ### Tips
 
