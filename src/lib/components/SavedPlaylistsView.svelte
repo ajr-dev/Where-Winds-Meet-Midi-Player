@@ -22,6 +22,7 @@
   let editingPlaylistId = null;
   let editingName = "";
   let selectedPlaylistId = null;
+  let deleteConfirmId = null; // For delete confirmation modal
   const flipDurationMs = 200;
 
   // Get selected playlist reactively from store
@@ -66,12 +67,22 @@
   }
 
   function handleDelete(id) {
-    if (confirm("Delete this playlist?")) {
-      deletePlaylist(id);
-      if (selectedPlaylistId === id) {
+    // Show confirmation modal instead of native confirm
+    deleteConfirmId = id;
+  }
+
+  function confirmDelete() {
+    if (deleteConfirmId) {
+      deletePlaylist(deleteConfirmId);
+      if (selectedPlaylistId === deleteConfirmId) {
         selectedPlaylistId = null;
       }
+      deleteConfirmId = null;
     }
+  }
+
+  function cancelDelete() {
+    deleteConfirmId = null;
   }
 
   function handleDndConsider(e) {
@@ -471,6 +482,40 @@
           disabled={!newPlaylistName.trim()}
         >
           Create
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Delete Confirmation Modal -->
+{#if deleteConfirmId}
+  <div
+    class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+    transition:fade={{ duration: 150 }}
+    onclick={cancelDelete}
+  >
+    <div
+      class="bg-[#282828] rounded-xl p-6 w-80 shadow-2xl border border-white/10"
+      transition:fly={{ y: 20, duration: 200 }}
+      onclick={(e) => e.stopPropagation()}
+    >
+      <h3 class="text-xl font-bold mb-2">Delete Playlist?</h3>
+      <p class="text-sm text-white/60 mb-4">
+        This will permanently delete "{$savedPlaylists.find(p => p.id === deleteConfirmId)?.name || 'this playlist'}".
+      </p>
+      <div class="flex gap-2 justify-end">
+        <button
+          class="spotify-button spotify-button--secondary"
+          onclick={cancelDelete}
+        >
+          Cancel
+        </button>
+        <button
+          class="spotify-button bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-2 text-sm font-semibold transition-all"
+          onclick={confirmDelete}
+        >
+          Delete
         </button>
       </div>
     </div>

@@ -326,6 +326,7 @@ pub fn play_midi(
     loop {
         let start_time = Instant::now();
         let mut key_active_count: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
+        let mut total_paused_duration = Duration::ZERO;
 
         for event in &midi_data.events {
             // Skip events before the seek offset
@@ -344,26 +345,13 @@ pub fn play_midi(
                 return;
             }
 
-            // Handle pause
-            while is_paused.load(Ordering::SeqCst) && is_playing.load(Ordering::SeqCst) {
-                std::thread::sleep(Duration::from_millis(50));
-                // Check if stopped during pause
-                if !is_playing.load(Ordering::SeqCst) {
-                    for (key, count) in &key_active_count {
-                        if *count > 0 {
-                            crate::keyboard::key_up(key);
-                        }
-                    }
-                    return;
-                }
-            }
-
-            // Wait until event time, but check for stop more frequently
-            // Adjust target time to account for seek offset
+            // Target time for this event (relative to playback start, minus offset)
             let target_time = Duration::from_millis(event.time_ms - offset_ms);
-            while start_time.elapsed() < target_time {
+
+            // Wait until we reach the event time, handling pause properly
+            loop {
+                // Check if we should stop
                 if !is_playing.load(Ordering::SeqCst) {
-                    // Release all pressed keys immediately
                     for (key, count) in &key_active_count {
                         if *count > 0 {
                             crate::keyboard::key_up(key);
@@ -371,11 +359,37 @@ pub fn play_midi(
                     }
                     return;
                 }
+
+                // Handle pause - track how long we're paused
+                if is_paused.load(Ordering::SeqCst) {
+                    let pause_start = Instant::now();
+                    while is_paused.load(Ordering::SeqCst) && is_playing.load(Ordering::SeqCst) {
+                        std::thread::sleep(Duration::from_millis(50));
+                        if !is_playing.load(Ordering::SeqCst) {
+                            for (key, count) in &key_active_count {
+                                if *count > 0 {
+                                    crate::keyboard::key_up(key);
+                                }
+                            }
+                            return;
+                        }
+                    }
+                    total_paused_duration += pause_start.elapsed();
+                }
+
+                // Calculate effective elapsed time (excluding paused time)
+                let effective_elapsed = start_time.elapsed().saturating_sub(total_paused_duration);
+
+                // Update current position
+                *current_position.lock().unwrap() = effective_elapsed.as_secs_f64() + (offset_ms as f64 / 1000.0);
+
+                // Check if we've reached the target time
+                if effective_elapsed >= target_time {
+                    break;
+                }
+
                 std::thread::sleep(Duration::from_millis(1));
             }
-
-            // Update current position (accounting for offset)
-            *current_position.lock().unwrap() = start_time.elapsed().as_secs_f64() + (offset_ms as f64 / 1000.0);
 
             // Progress updates are now handled by the separate progress thread
 
