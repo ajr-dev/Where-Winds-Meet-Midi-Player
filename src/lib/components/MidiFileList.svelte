@@ -1,5 +1,6 @@
 <script>
   import Icon from "@iconify/svelte";
+  import { fade, fly } from "svelte/transition";
   import {
     midiFiles,
     currentFile,
@@ -7,25 +8,72 @@
     playlist,
     isPlaying,
     isPaused,
+    favorites,
+    toggleFavorite,
+    savedPlaylists,
+    addToSavedPlaylist,
   } from "../stores/player.js";
 
   let searchQuery = "";
+  let showPlaylistMenu = null;
+  let toast = null;
+  let toastTimeout = null;
 
-  async function handlePlay(file) {
-    await playMidi(file.path);
+  function showToast(message, type = "success") {
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toast = { message, type };
+    toastTimeout = setTimeout(() => {
+      toast = null;
+    }, 2000);
   }
 
-  function addToPlaylist(file) {
+  async function handlePlay(file) {
+    // Add to playlist if not already there
     playlist.update((list) => {
       if (!list.find((f) => f.path === file.path)) {
         return [...list, file];
       }
       return list;
     });
+    await playMidi(file.path);
   }
 
+  function addToQueue(file) {
+    const added = !$playlist.find((f) => f.path === file.path);
+    playlist.update((list) => {
+      if (!list.find((f) => f.path === file.path)) {
+        return [...list, file];
+      }
+      return list;
+    });
+    showToast(added ? "Added to queue" : "Already in queue", added ? "success" : "info");
+  }
+
+  function handleAddToPlaylist(playlistId, file) {
+    const pl = $savedPlaylists.find(p => p.id === playlistId);
+    const alreadyExists = pl?.tracks.some(t => t.path === file.path);
+    addToSavedPlaylist(playlistId, file);
+    showPlaylistMenu = null;
+    showToast(
+      alreadyExists ? `Already in "${pl?.name}"` : `Added to "${pl?.name}"`,
+      alreadyExists ? "info" : "success"
+    );
+  }
+
+  function handleToggleFavorite(file) {
+    const wasFavorite = $favorites.some((f) => f.path === file.path);
+    toggleFavorite(file);
+    showToast(
+      wasFavorite ? "Removed from favorites" : "Added to favorites",
+      wasFavorite ? "info" : "success"
+    );
+  }
+
+  // Reactive favorite lookup using a Set for O(1) performance
+  $: favoritePaths = new Set($favorites.map(f => f.path));
+
   $: filteredFiles = $midiFiles.filter((file) =>
-    file.name.toLowerCase().includes(searchQuery.toLowerCase()),
+    file.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 </script>
 
@@ -38,38 +86,38 @@
     </p>
 
     <!-- Search Input -->
-    <div class="">
-      <div class="relative">
-        <Icon
-          icon="mdi:magnify"
-          class="absolute left-3 top-1/2 -translate-y-1/2 text-white/60 w-5 h-5"
-        />
-        <input
-          type="text"
-          placeholder="Search songs..."
-          bind:value={searchQuery}
-          class="w-full bg-white/10 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#1db954] focus:border-transparent"
-        />
-        {#if searchQuery}
-          <button
-            on:click={() => (searchQuery = "")}
-            class="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white"
-          >
-            <Icon icon="mdi:close" class="w-5 h-5" />
-          </button>
-        {/if}
-      </div>
+    <div class="relative">
+      <Icon
+        icon="mdi:magnify"
+        class="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 w-5 h-5"
+      />
+      <input
+        type="text"
+        placeholder="Search songs..."
+        bind:value={searchQuery}
+        class="w-full bg-white/5 border border-white/10 rounded-full pl-10 pr-10 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-[#1db954] focus:border-transparent focus:bg-white/10 transition-all"
+      />
+      {#if searchQuery}
+        <button
+          onclick={() => (searchQuery = "")}
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+          transition:fade={{ duration: 150 }}
+        >
+          <Icon icon="mdi:close-circle" class="w-5 h-5" />
+        </button>
+      {/if}
     </div>
   </div>
 
   <!-- Song List (Scrollable) -->
   <div class="flex-1 overflow-y-auto space-y-1 pr-2">
-    {#each filteredFiles as file, index}
+    {#each filteredFiles as file, index (file.path)}
       <div
-        class="group spotify-list-item flex items-center gap-4 py-2 {$currentFile ===
+        class="group spotify-list-item flex items-center gap-4 py-2 transition-all duration-200 {$currentFile ===
         file.path
-          ? 'bg-white/10'
-          : ''}"
+          ? 'bg-white/10 ring-1 ring-white/5'
+          : 'hover:bg-white/5'}"
+        in:fly={{ y: 10, duration: 200, delay: Math.min(index * 20, 200) }}
       >
         <!-- Number / Play Button / Playing Indicator -->
         <div class="w-8 flex items-center justify-center flex-shrink-0">
@@ -77,36 +125,30 @@
             <!-- Playing indicator (animated bars) -->
             <div class="flex items-end gap-0.5 h-4">
               <div
-                class="w-0.5 bg-[#1db954] animate-music-bar-1"
+                class="w-0.5 bg-[#1db954] rounded-full"
                 style="height: 60%; animation: music-bar-1 0.6s ease-in-out infinite;"
               ></div>
               <div
-                class="w-0.5 bg-[#1db954] animate-music-bar-2"
+                class="w-0.5 bg-[#1db954] rounded-full"
                 style="height: 100%; animation: music-bar-2 0.8s ease-in-out infinite;"
               ></div>
               <div
-                class="w-0.5 bg-[#1db954] animate-music-bar-3"
+                class="w-0.5 bg-[#1db954] rounded-full"
                 style="height: 80%; animation: music-bar-3 0.7s ease-in-out infinite;"
               ></div>
             </div>
           {:else}
             <span
-              class="text-sm text-white/60 {$currentFile === file.path
-                ? 'text-[#1db954]'
+              class="text-sm text-white/40 {$currentFile === file.path
+                ? 'text-[#1db954] font-semibold'
                 : ''} group-hover:hidden">{index + 1}</span
             >
             <button
-              class="hidden group-hover:block"
-              on:click={() => handlePlay(file)}
+              class="hidden group-hover:flex items-center justify-center w-7 h-7 rounded-full bg-[#1db954] hover:scale-110 transition-transform shadow-lg"
+              onclick={() => handlePlay(file)}
               title="Play"
             >
-              <svg
-                class="w-4 h-4 text-white"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <Icon icon="mdi:play" class="w-4 h-4 text-black" />
             </button>
           {/if}
         </div>
@@ -116,8 +158,8 @@
           class="flex-1 min-w-0"
           role="button"
           tabindex="0"
-          on:click={() => handlePlay(file)}
-          on:keydown={(event) => {
+          onclick={() => handlePlay(file)}
+          onkeydown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
               handlePlay(file);
@@ -125,64 +167,148 @@
           }}
         >
           <p
-            class="text-sm font-medium text-white truncate {$currentFile ===
+            class="text-sm font-medium text-white truncate transition-colors {$currentFile ===
             file.path
               ? 'text-[#1db954]'
-              : ''}"
+              : 'group-hover:text-white'}"
           >
             {file.name}
           </p>
-          <p class="text-xs text-white/60">MIDI Track</p>
+          <p class="text-xs text-white/40">MIDI Track</p>
         </div>
 
         <!-- Duration -->
-        <div class="text-sm text-white/60 flex-shrink-0">
+        <div class="text-sm text-white/40 flex-shrink-0 tabular-nums">
           {file.duration
             ? `${Math.floor(file.duration / 60)}:${String(Math.floor(file.duration % 60)).padStart(2, "0")}`
             : "--:--"}
         </div>
 
-        <!-- Add to Playlist -->
-        <button
-          class="opacity-0 group-hover:opacity-100 text-white/60 hover:text-white transition-all flex-shrink-0"
-          on:click={() => addToPlaylist(file)}
-          title="Add to playlist"
-        >
-          <svg
-            class="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        <!-- Action Buttons -->
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <!-- Favorite Button -->
+          <button
+            class="p-1.5 rounded-full transition-all {favoritePaths.has(file.path)
+              ? 'text-[#1db954]'
+              : 'text-white/30 opacity-0 group-hover:opacity-100 hover:text-white'}"
+            onclick={(e) => {
+              e.stopPropagation();
+              handleToggleFavorite(file);
+            }}
+            title={favoritePaths.has(file.path)
+              ? "Remove from favorites"
+              : "Add to favorites"}
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 4v16m8-8H4"
+            <Icon
+              icon={favoritePaths.has(file.path) ? "mdi:heart" : "mdi:heart-outline"}
+              class="w-5 h-5"
             />
-          </svg>
-        </button>
+          </button>
+
+          <!-- Add to Playlist Menu -->
+          <div class="relative">
+            <button
+              class="p-1.5 rounded-full text-white/30 opacity-0 group-hover:opacity-100 hover:text-white transition-all"
+              onclick={(e) => {
+                e.stopPropagation();
+                showPlaylistMenu = showPlaylistMenu === file.path ? null : file.path;
+              }}
+              title="Add to playlist"
+            >
+              <Icon icon="mdi:playlist-plus" class="w-5 h-5" />
+            </button>
+
+            {#if showPlaylistMenu === file.path}
+              <div
+                class="absolute right-0 top-full mt-1 w-48 bg-[#282828] rounded-lg shadow-xl border border-white/10 py-1 z-50"
+                transition:fly={{ y: -5, duration: 150 }}
+              >
+                <button
+                  class="w-full px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 flex items-center gap-2"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    addToQueue(file);
+                    showPlaylistMenu = null;
+                  }}
+                >
+                  <Icon icon="mdi:playlist-music" class="w-4 h-4" />
+                  Add to Queue
+                </button>
+
+                {#if $savedPlaylists.length > 0}
+                  <div class="border-t border-white/10 my-1"></div>
+                  {#each $savedPlaylists as pl}
+                    <button
+                      class="w-full px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 flex items-center gap-2 truncate"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        handleAddToPlaylist(pl.id, file);
+                      }}
+                    >
+                      <Icon icon="mdi:playlist-music-outline" class="w-4 h-4 flex-shrink-0" />
+                      <span class="truncate">{pl.name}</span>
+                    </button>
+                  {/each}
+                {/if}
+              </div>
+            {/if}
+          </div>
+        </div>
       </div>
     {/each}
   </div>
 
   {#if filteredFiles.length === 0 && searchQuery}
-    <div class="text-center py-16 text-white/50">
-      <Icon
-        icon="mdi:music-note-off"
-        class="w-16 h-16 mx-auto mb-4 opacity-50"
-      />
-      <p class="text-base font-semibold mb-2">No results found</p>
+    <div
+      class="flex-1 flex flex-col items-center justify-center text-white/40 py-16"
+      transition:fade
+    >
+      <div
+        class="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6"
+      >
+        <Icon icon="mdi:music-note-off" class="w-10 h-10 opacity-50" />
+      </div>
+      <p class="text-lg font-semibold mb-2 text-white/60">No results found</p>
       <p class="text-sm">Try a different search term</p>
     </div>
   {:else if $midiFiles.length === 0}
-    <div class="text-center py-16 text-white/50">
-      <Icon
-        icon="mdi:music-note-plus"
-        class="w-16 h-16 mx-auto mb-4 opacity-50"
-      />
-      <p class="text-base font-semibold mb-2">No songs yet</p>
+    <div
+      class="flex-1 flex flex-col items-center justify-center text-white/40 py-16"
+      transition:fade
+    >
+      <div
+        class="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6"
+      >
+        <Icon icon="mdi:music-note-plus" class="w-10 h-10 opacity-50" />
+      </div>
+      <p class="text-lg font-semibold mb-2 text-white/60">No songs yet</p>
       <p class="text-sm">Place MIDI files in the album folder</p>
     </div>
   {/if}
 </div>
+
+<!-- Toast Notification -->
+{#if toast}
+  <div
+    class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50"
+    transition:fly={{ y: 20, duration: 200 }}
+  >
+    <div
+      class="px-4 py-2 rounded-full shadow-lg flex items-center gap-2 {toast.type === 'success'
+        ? 'bg-[#1db954] text-black'
+        : 'bg-white/20 text-white'}"
+    >
+      <Icon
+        icon={toast.type === 'success' ? 'mdi:check-circle' : 'mdi:information'}
+        class="w-4 h-4"
+      />
+      <span class="text-sm font-medium">{toast.message}</span>
+    </div>
+  </div>
+{/if}
+
+<svelte:window
+  onclick={() => {
+    showPlaylistMenu = null;
+  }}
+/>

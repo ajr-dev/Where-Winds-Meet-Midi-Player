@@ -16,7 +16,7 @@
     </span>
 
     <div
-      class="group flex-1 h-1 bg-white/20 rounded-full relative hover:h-1.5 transition-all"
+      class="group flex-1 h-1 bg-white/20 rounded-full relative"
       role="progressbar"
       aria-valuemin="0"
       aria-valuemax="100"
@@ -25,11 +25,11 @@
     >
       <div
         class="h-full bg-white rounded-full relative group-hover:bg-[#1db954]"
-        style="width: {$progress}%"
+        style="width: {$progress}%; transition: none;"
       >
         <!-- Playhead - only visible on hover -->
         <div
-          class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+          class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg"
         ></div>
       </div>
     </div>

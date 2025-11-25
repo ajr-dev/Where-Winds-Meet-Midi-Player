@@ -15,12 +15,203 @@ export const midiFiles = writable([]);
 export const playlist = writable([]);
 export const currentIndex = writable(0);
 
+// Multiple playlists support
+export const savedPlaylists = writable([]);
+export const activePlaylistId = writable(null);
+
+// Favorites
+export const favorites = writable([]);
+
 // UI state
 export const isDraggable = writable(true);
 export const isMinimized = writable(false);
 export const smartPause = writable(true);
 
 let smartPauseCooldownUntil = 0;
+
+// LocalStorage keys
+const STORAGE_KEYS = {
+  FAVORITES: 'wwm-favorites',
+  PLAYLISTS: 'wwm-playlists',
+  ACTIVE_PLAYLIST: 'wwm-active-playlist'
+};
+
+// Initialize from localStorage
+export function initializeStorage() {
+  try {
+    const storedFavorites = localStorage.getItem(STORAGE_KEYS.FAVORITES);
+    if (storedFavorites) {
+      favorites.set(JSON.parse(storedFavorites));
+    }
+
+    const storedPlaylists = localStorage.getItem(STORAGE_KEYS.PLAYLISTS);
+    if (storedPlaylists) {
+      savedPlaylists.set(JSON.parse(storedPlaylists));
+    }
+
+    const storedActivePlaylist = localStorage.getItem(STORAGE_KEYS.ACTIVE_PLAYLIST);
+    if (storedActivePlaylist) {
+      activePlaylistId.set(storedActivePlaylist);
+    }
+  } catch (error) {
+    console.error('Failed to load from localStorage:', error);
+  }
+}
+
+// Save favorites to localStorage
+function saveFavorites(favs) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(favs));
+  } catch (error) {
+    console.error('Failed to save favorites:', error);
+  }
+}
+
+// Save playlists to localStorage
+function savePlaylists(lists) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(lists));
+  } catch (error) {
+    console.error('Failed to save playlists:', error);
+  }
+}
+
+// Favorites operations
+export function toggleFavorite(file) {
+  favorites.update(favs => {
+    const exists = favs.find(f => f.path === file.path);
+    let newFavs;
+    if (exists) {
+      newFavs = favs.filter(f => f.path !== file.path);
+    } else {
+      newFavs = [...favs, file];
+    }
+    saveFavorites(newFavs);
+    return newFavs;
+  });
+}
+
+export function isFavorite(path) {
+  let result = false;
+  favorites.subscribe(favs => {
+    result = favs.some(f => f.path === path);
+  })();
+  return result;
+}
+
+// Playlist operations
+export function createPlaylist(name) {
+  const id = Date.now().toString();
+  const newPlaylist = {
+    id,
+    name,
+    tracks: [],
+    createdAt: new Date().toISOString()
+  };
+
+  savedPlaylists.update(lists => {
+    const newLists = [...lists, newPlaylist];
+    savePlaylists(newLists);
+    return newLists;
+  });
+
+  return id;
+}
+
+export function deletePlaylist(id) {
+  savedPlaylists.update(lists => {
+    const newLists = lists.filter(p => p.id !== id);
+    savePlaylists(newLists);
+    return newLists;
+  });
+
+  // If active playlist was deleted, clear it
+  const currentActive = get(activePlaylistId);
+  if (currentActive === id) {
+    activePlaylistId.set(null);
+  }
+}
+
+export function renamePlaylist(id, newName) {
+  savedPlaylists.update(lists => {
+    const newLists = lists.map(p =>
+      p.id === id ? { ...p, name: newName } : p
+    );
+    savePlaylists(newLists);
+    return newLists;
+  });
+}
+
+export function addToSavedPlaylist(playlistId, file) {
+  savedPlaylists.update(lists => {
+    const newLists = lists.map(p => {
+      if (p.id === playlistId) {
+        // Check for duplicate
+        if (!p.tracks.find(t => t.path === file.path)) {
+          return { ...p, tracks: [...p.tracks, file] };
+        }
+      }
+      return p;
+    });
+    savePlaylists(newLists);
+    return newLists;
+  });
+}
+
+export function removeFromSavedPlaylist(playlistId, filePath) {
+  savedPlaylists.update(lists => {
+    const newLists = lists.map(p => {
+      if (p.id === playlistId) {
+        return { ...p, tracks: p.tracks.filter(t => t.path !== filePath) };
+      }
+      return p;
+    });
+    savePlaylists(newLists);
+    return newLists;
+  });
+}
+
+export function reorderSavedPlaylist(playlistId, fromIndex, toIndex) {
+  savedPlaylists.update(lists => {
+    const newLists = lists.map(p => {
+      if (p.id === playlistId) {
+        const tracks = [...p.tracks];
+        const [item] = tracks.splice(fromIndex, 1);
+        tracks.splice(toIndex, 0, item);
+        return { ...p, tracks };
+      }
+      return p;
+    });
+    savePlaylists(newLists);
+    return newLists;
+  });
+}
+
+export function reorderPlaylists(fromIndex, toIndex) {
+  savedPlaylists.update(lists => {
+    const newLists = [...lists];
+    const [item] = newLists.splice(fromIndex, 1);
+    newLists.splice(toIndex, 0, item);
+    savePlaylists(newLists);
+    return newLists;
+  });
+}
+
+export async function loadPlaylistToQueue(playlistId, autoPlay = true) {
+  const lists = get(savedPlaylists);
+  const targetPlaylist = lists.find(p => p.id === playlistId);
+  if (targetPlaylist && targetPlaylist.tracks.length > 0) {
+    playlist.set([...targetPlaylist.tracks]);
+    currentIndex.set(0);
+    activePlaylistId.set(playlistId);
+    localStorage.setItem(STORAGE_KEYS.ACTIVE_PLAYLIST, playlistId);
+
+    // Auto-play first track
+    if (autoPlay) {
+      await playMidi(targetPlaylist.tracks[0].path);
+    }
+  }
+}
 
 // Derived states
 export const progress = derived(
@@ -42,7 +233,6 @@ export async function loadMidiFiles() {
   try {
     const files = await invoke('load_midi_files');
     midiFiles.set(files);
-    playlist.set([]); // Start with empty queue
   } catch (error) {
     console.error('Failed to load MIDI files:', error);
   }
@@ -52,10 +242,17 @@ export async function loadMidiFiles() {
 export async function playMidi(path) {
   try {
     delaySmartPause();
-    if (get(isPlaying)) {
-      await stopPlayback();
-    }
+
+    // Reset state immediately before playing
+    currentPosition.set(0);
+    isPlaying.set(false);
+    isPaused.set(false);
+
     await invoke('play_midi', { path });
+
+    // Small delay to let backend initialize
+    await new Promise(resolve => setTimeout(resolve, 50));
+
     // Focus is now handled in the backend after playback starts
     await refreshPlaybackState();
     isPlaying.set(true);
@@ -120,6 +317,10 @@ export async function playNext() {
   const nextIndex = ($currentIndex + 1) % $playlist.length;
   currentIndex.set(nextIndex);
 
+  // Reset position immediately before starting new track
+  currentPosition.set(0);
+  totalDuration.set(0);
+
   await playMidi($playlist[nextIndex].path);
 }
 
@@ -133,7 +334,45 @@ export async function playPrevious() {
   const prevIndex = ($currentIndex - 1 + $playlist.length) % $playlist.length;
   currentIndex.set(prevIndex);
 
+  // Reset position immediately before starting new track
+  currentPosition.set(0);
+  totalDuration.set(0);
+
   await playMidi($playlist[prevIndex].path);
+}
+
+// Add to queue and optionally play
+export function addToQueue(file, playNow = false) {
+  playlist.update(list => {
+    // Allow duplicates in queue (unlike library playlists)
+    const newList = [...list, file];
+    if (playNow && list.length === 0) {
+      // If queue was empty, play the first item
+      setTimeout(() => playMidi(file.path), 0);
+    }
+    return newList;
+  });
+}
+
+// Reorder queue
+export function reorderQueue(fromIndex, toIndex) {
+  playlist.update(list => {
+    const items = [...list];
+    const [item] = items.splice(fromIndex, 1);
+    items.splice(toIndex, 0, item);
+
+    // Update currentIndex if needed
+    const $currentIndex = get(currentIndex);
+    if (fromIndex === $currentIndex) {
+      currentIndex.set(toIndex);
+    } else if (fromIndex < $currentIndex && toIndex >= $currentIndex) {
+      currentIndex.set($currentIndex - 1);
+    } else if (fromIndex > $currentIndex && toIndex <= $currentIndex) {
+      currentIndex.set($currentIndex + 1);
+    }
+
+    return items;
+  });
 }
 
 // Toggle draggable mode
@@ -150,7 +389,10 @@ export async function toggleDraggable() {
 
 // Initialize event listeners
 export function initializeListeners() {
-  // Listen for playback progress updates
+  // Initialize storage first
+  initializeStorage();
+
+  // Listen for playback progress updates from backend (single source of truth)
   listen('playback-progress', (event) => {
     currentPosition.set(event.payload);
   });
@@ -172,18 +414,6 @@ export function initializeListeners() {
       currentPosition.set(0);
     }
   });
-
-  // Update UI progress more frequently for smooth animation
-  setInterval(() => {
-    if (get(isPlaying) && !get(isPaused)) {
-      // Increment position locally for smooth UI updates
-      currentPosition.update(pos => {
-        const newPos = pos + 0.1;
-        const duration = get(totalDuration);
-        return newPos <= duration ? newPos : duration;
-      });
-    }
-  }, 100); // Update every 100ms for smooth progress
 
   // Check game focus periodically for smart pause
   setInterval(async () => {

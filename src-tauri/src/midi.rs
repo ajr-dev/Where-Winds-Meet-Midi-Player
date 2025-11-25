@@ -32,6 +32,55 @@ const HIGH_KEYS: [&str; 7] = ["q", "w", "e", "r", "t", "y", "u"];
 const SCALE_INTERVALS: [i32; 7] = [0, 2, 4, 5, 7, 9, 11];
 const ROOT_NOTE: i32 = 60; // C4
 
+/// Quick function to get MIDI duration without full processing
+pub fn get_midi_duration(path: &str) -> Result<f64, String> {
+    let data = std::fs::read(path).map_err(|e| e.to_string())?;
+    let smf = Smf::parse(&data).map_err(|e| e.to_string())?;
+
+    let ticks_per_quarter = match smf.header.timing {
+        midly::Timing::Metrical(tpq) => tpq.as_int() as f64,
+        _ => 480.0,
+    };
+
+    let mut tempo_changes: Vec<(u64, f64)> = Vec::new();
+    let mut max_ticks: u64 = 0;
+
+    // Collect tempo changes and find max ticks
+    for track in &smf.tracks {
+        let mut track_time_ticks: u64 = 0;
+        for event in track {
+            track_time_ticks += event.delta.as_int() as u64;
+            if let TrackEventKind::Meta(midly::MetaMessage::Tempo(t)) = event.kind {
+                tempo_changes.push((track_time_ticks, t.as_int() as f64));
+            }
+        }
+        if track_time_ticks > max_ticks {
+            max_ticks = track_time_ticks;
+        }
+    }
+    tempo_changes.sort_by_key(|(time, _)| *time);
+
+    // Convert max ticks to milliseconds
+    let mut result_ms = 0.0;
+    let mut last_tick = 0u64;
+    let mut current_tempo = 500_000.0; // Default 120 BPM
+
+    for &(change_tick, new_tempo) in &tempo_changes {
+        if change_tick >= max_ticks {
+            break;
+        }
+        let delta_ticks = change_tick - last_tick;
+        result_ms += delta_ticks as f64 / ticks_per_quarter * current_tempo / 1000.0;
+        last_tick = change_tick;
+        current_tempo = new_tempo;
+    }
+
+    let delta_ticks = max_ticks - last_tick;
+    result_ms += delta_ticks as f64 / ticks_per_quarter * current_tempo / 1000.0;
+
+    Ok(result_ms / 1000.0) // Convert to seconds
+}
+
 pub fn load_midi(path: &str) -> Result<MidiData, String> {
     let data = std::fs::read(path).map_err(|e| e.to_string())?;
     let smf = Smf::parse(&data).map_err(|e| e.to_string())?;
