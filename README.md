@@ -1,6 +1,7 @@
 # WWM Overlay - MIDI Music Player (21 Keys)
 A beautiful music player for Where Winds Meet that plays your MIDI files by automatically pressing the right keyboard keys in-game.
 
+<img width="1125" height="620" alt="Screenshot 2025-11-25 105732" src="https://github.com/user-attachments/assets/3884a12e-3950-410a-b48d-44756581b159" />
 
 https://github.com/user-attachments/assets/af8d0f3d-3985-4db3-b6cf-bea16f4cb2b2
 
