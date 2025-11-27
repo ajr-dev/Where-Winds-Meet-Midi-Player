@@ -89,11 +89,6 @@ impl AppState {
             let was_paused = self.is_paused.load(Ordering::SeqCst);
             let paused = !was_paused;
             self.is_paused.store(paused, Ordering::SeqCst);
-            
-            if !was_paused && paused {
-                let offset = *self.seek_offset.lock().unwrap();
-                *self.current_position.lock().unwrap() = offset;
-            }
         }
     }
 
