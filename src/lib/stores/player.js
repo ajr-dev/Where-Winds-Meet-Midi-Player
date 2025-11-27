@@ -12,6 +12,12 @@ export const currentFile = writable(null);
 export const loopMode = writable(false);
 export const isSeeking = writable(false);
 
+// Note calculation mode
+export const noteMode = writable("Closest");
+
+// Octave shift (-2 to +2)
+export const octaveShift = writable(0);
+
 // Playlist state
 export const midiFiles = writable([]);
 export const playlist = writable([]);
@@ -79,11 +85,12 @@ let smartPauseCooldownUntil = 0;
 const STORAGE_KEYS = {
   FAVORITES: 'wwm-favorites',
   PLAYLISTS: 'wwm-playlists',
-  ACTIVE_PLAYLIST: 'wwm-active-playlist'
+  ACTIVE_PLAYLIST: 'wwm-active-playlist',
+  NOTE_MODE: 'wwm-note-mode'
 };
 
 // Initialize from localStorage
-export function initializeStorage() {
+export async function initializeStorage() {
   try {
     const storedFavorites = localStorage.getItem(STORAGE_KEYS.FAVORITES);
     if (storedFavorites) {
@@ -98,6 +105,14 @@ export function initializeStorage() {
     const storedActivePlaylist = localStorage.getItem(STORAGE_KEYS.ACTIVE_PLAYLIST);
     if (storedActivePlaylist) {
       activePlaylistId.set(storedActivePlaylist);
+    }
+
+    // Load note mode from localStorage and sync with backend
+    const storedNoteMode = localStorage.getItem(STORAGE_KEYS.NOTE_MODE);
+    if (storedNoteMode) {
+      noteMode.set(storedNoteMode);
+      // Sync with backend
+      await invoke('set_note_mode', { mode: storedNoteMode });
     }
   } catch (error) {
     console.error('Failed to load from localStorage:', error);
@@ -366,6 +381,7 @@ export async function toggleLoop() {
   }
 }
 
+<<<<<<< HEAD
 let seekThrottleTimeout = null;
 let pendingSeekPosition = null;
 
@@ -417,6 +433,30 @@ export async function endSeeking() {
   
   await new Promise(resolve => setTimeout(resolve, 50));
   isSeeking.set(false);
+}
+
+// Set note calculation mode (Default or Detailed)
+export async function setNoteMode(mode) {
+  try {
+    await invoke('set_note_mode', { mode });
+    noteMode.set(mode);
+    localStorage.setItem(STORAGE_KEYS.NOTE_MODE, mode);
+    console.log(`Note mode set to: ${mode}`);
+  } catch (error) {
+    console.error('Failed to set note mode:', error);
+  }
+}
+
+// Set octave shift (-2 to +2)
+export async function setOctaveShift(shift) {
+  try {
+    const clamped = Math.max(-2, Math.min(2, shift));
+    await invoke('set_octave_shift', { shift: clamped });
+    octaveShift.set(clamped);
+    console.log(`Octave shift set to: ${clamped}`);
+  } catch (error) {
+    console.error('Failed to set octave shift:', error);
+  }
 }
 
 // Play next in playlist
@@ -578,6 +618,12 @@ async function refreshPlaybackState() {
     totalDuration.set(state.total_duration);
     if (state.current_file) {
       currentFile.set(state.current_file);
+    }
+    if (state.note_mode) {
+      noteMode.set(state.note_mode);
+    }
+    if (state.octave_shift !== undefined) {
+      octaveShift.set(state.octave_shift);
     }
   } catch (error) {
     console.error('Failed to refresh playback status:', error);
