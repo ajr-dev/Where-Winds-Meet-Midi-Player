@@ -10,6 +10,7 @@ export const currentPosition = writable(0);
 export const totalDuration = writable(0);
 export const currentFile = writable(null);
 export const loopMode = writable(false);
+export const isSeeking = writable(false);
 
 // Playlist state
 export const midiFiles = writable([]);
@@ -365,6 +366,59 @@ export async function toggleLoop() {
   }
 }
 
+let seekThrottleTimeout = null;
+let pendingSeekPosition = null;
+
+export async function seekToPosition(position) {
+  isSeeking.set(true);
+  pendingSeekPosition = position;
+  
+  if (seekThrottleTimeout) {
+    clearTimeout(seekThrottleTimeout);
+  }
+  
+  seekThrottleTimeout = setTimeout(async () => {
+    const positionToSeek = pendingSeekPosition;
+    pendingSeekPosition = null;
+    
+    try {
+      await invoke('seek', { position: positionToSeek });
+      currentPosition.set(positionToSeek);
+      delaySmartPause();
+    } catch (error) {
+      console.error('Failed to seek:', error);
+    } finally {
+      setTimeout(() => {
+        if (!pendingSeekPosition) {
+          isSeeking.set(false);
+        }
+      }, 100);
+    }
+  }, 50);
+}
+
+export async function endSeeking() {
+  if (seekThrottleTimeout) {
+    clearTimeout(seekThrottleTimeout);
+    seekThrottleTimeout = null;
+  }
+  
+  if (pendingSeekPosition !== null) {
+    const positionToSeek = pendingSeekPosition;
+    pendingSeekPosition = null;
+    try {
+      await invoke('seek', { position: positionToSeek });
+      currentPosition.set(positionToSeek);
+      delaySmartPause();
+    } catch (error) {
+      console.error('Failed to seek:', error);
+    }
+  }
+  
+  await new Promise(resolve => setTimeout(resolve, 50));
+  isSeeking.set(false);
+}
+
 // Play next in playlist
 export async function playNext() {
   const $playlist = get(playlist);
@@ -452,7 +506,9 @@ export function initializeListeners() {
 
   // Listen for playback progress updates from backend (single source of truth)
   listen('playback-progress', (event) => {
-    currentPosition.set(event.payload);
+    if (!get(isSeeking)) {
+      currentPosition.set(event.payload);
+    }
   });
 
   // Listen for playback ended

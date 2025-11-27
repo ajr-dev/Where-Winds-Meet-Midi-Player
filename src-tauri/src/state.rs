@@ -86,8 +86,14 @@ impl AppState {
 
     pub fn toggle_pause(&mut self) {
         if self.is_playing.load(Ordering::SeqCst) {
-            let paused = !self.is_paused.load(Ordering::SeqCst);
+            let was_paused = self.is_paused.load(Ordering::SeqCst);
+            let paused = !was_paused;
             self.is_paused.store(paused, Ordering::SeqCst);
+            
+            if !was_paused && paused {
+                let offset = *self.seek_offset.lock().unwrap();
+                *self.current_position.lock().unwrap() = offset;
+            }
         }
     }
 
@@ -106,15 +112,20 @@ impl AppState {
     }
 
     pub fn seek(&mut self, position: f64, window: Window) -> Result<(), String> {
-        if self.is_playing.load(Ordering::SeqCst) {
-            // Store the seek position
+        let was_playing = self.is_playing.load(Ordering::SeqCst);
+        let was_paused = self.is_paused.load(Ordering::SeqCst);
+        
+        if was_playing && !was_paused {
             *self.seek_offset.lock().unwrap() = position;
-
-            // Restart playback from the new position
             self.stop_playback();
             self.start_playback(window)?;
+        } else if was_playing && was_paused {
+            *self.seek_offset.lock().unwrap() = position;
+            *self.current_position.lock().unwrap() = position;
+            self.stop_playback();
+            self.start_playback(window)?;
+            self.is_paused.store(true, Ordering::SeqCst);
         } else {
-            // Just set the position if not playing
             *self.current_position.lock().unwrap() = position;
             *self.seek_offset.lock().unwrap() = position;
         }
@@ -122,14 +133,7 @@ impl AppState {
     }
 
     pub fn get_playback_state(&self) -> PlaybackState {
-        let mut position = *self.current_position.lock().unwrap();
-
-        // Update position based on playback time if playing
-        if self.is_playing.load(Ordering::SeqCst) && !self.is_paused.load(Ordering::SeqCst) {
-            if let Some(start_time) = *self.playback_start.lock().unwrap() {
-                position = start_time.elapsed().as_secs_f64();
-            }
-        }
+        let position = *self.current_position.lock().unwrap();
 
         PlaybackState {
             is_playing: self.is_playing.load(Ordering::SeqCst),

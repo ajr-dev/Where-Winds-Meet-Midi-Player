@@ -101,7 +101,8 @@ async fn pause_resume(
 ) -> Result<PlaybackState, String> {
     let mut app_state = state.lock().unwrap();
     app_state.toggle_pause();
-    Ok(app_state.get_playback_state())
+    let playback_state = app_state.get_playback_state();
+    Ok(playback_state)
 }
 
 #[tauri::command]
