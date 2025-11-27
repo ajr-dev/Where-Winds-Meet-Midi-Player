@@ -381,7 +381,6 @@ export async function toggleLoop() {
   }
 }
 
-<<<<<<< HEAD
 let seekThrottleTimeout = null;
 let pendingSeekPosition = null;
 
