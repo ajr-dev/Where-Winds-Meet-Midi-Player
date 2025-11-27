@@ -86,13 +86,13 @@ pub fn load_midi(path: &str) -> Result<MidiData, String> {
     let smf = Smf::parse(&data).map_err(|e| e.to_string())?;
 
     let mut events = Vec::new();
-    let mut current_time_ms: u64 = 0;
+    let _current_time_ms: u64 = 0;
     let ticks_per_quarter = match smf.header.timing {
         midly::Timing::Metrical(tpq) => tpq.as_int() as f64,
         _ => 480.0, // Default
     };
 
-    let mut tempo = 500_000.0; // Default tempo (120 BPM)
+    let _tempo = 500_000.0; // Default tempo (120 BPM)
     let mut tempo_changes: Vec<(u64, f64)> = Vec::new();
 
     // First pass: collect all tempo changes from all tracks
@@ -119,14 +119,14 @@ pub fn load_midi(path: &str) -> Result<MidiData, String> {
             }
             // Add time up to this tempo change
             let delta_ticks = change_tick - last_tick;
-            result_ms += (delta_ticks as f64 / ticks_per_quarter * current_tempo / 1000.0);
+            result_ms += delta_ticks as f64 / ticks_per_quarter * current_tempo / 1000.0;
             last_tick = change_tick;
             current_tempo = new_tempo;
         }
 
         // Add remaining time
         let delta_ticks = ticks - last_tick;
-        result_ms += (delta_ticks as f64 / ticks_per_quarter * current_tempo / 1000.0);
+        result_ms += delta_ticks as f64 / ticks_per_quarter * current_tempo / 1000.0;
         result_ms as u64
     };
 

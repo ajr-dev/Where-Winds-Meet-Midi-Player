@@ -125,9 +125,9 @@ pub fn focus_black_desert_window() -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
         if let Some(hwnd) = data.target {
-            ShowWindow(hwnd, SW_RESTORE);
+            let _ = ShowWindow(hwnd, SW_RESTORE);
             std::thread::sleep(std::time::Duration::from_millis(50));
-            SetForegroundWindow(hwnd);
+            let _ = SetForegroundWindow(hwnd);
             std::thread::sleep(std::time::Duration::from_millis(100));
             Ok(())
         } else {

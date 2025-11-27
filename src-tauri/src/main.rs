@@ -8,7 +8,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     RegisterHotKey, MOD_CONTROL, MOD_NOREPEAT, VK_END, VK_F9, VK_F10, VK_F11, VK_F12,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetMessageW, SetWindowsHookExW, CallNextHookEx, TranslateMessage, DispatchMessageW,
+    GetMessageW, SetWindowsHookExW, CallNextHookEx,
     MSG, WM_HOTKEY, WM_KEYDOWN, WM_SYSKEYDOWN, HHOOK, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL,
 };
 use windows::Win32::Foundation::LPARAM;
@@ -337,8 +337,8 @@ fn start_hotkey_listener(app_handle: AppHandle) {
                 }
 
                 // Dispatch other messages (needed for low-level hook to work)
-                windows::Win32::UI::WindowsAndMessaging::TranslateMessage(&msg);
-                windows::Win32::UI::WindowsAndMessaging::DispatchMessageW(&msg);
+                let _ = windows::Win32::UI::WindowsAndMessaging::TranslateMessage(&msg);
+                let _ = windows::Win32::UI::WindowsAndMessaging::DispatchMessageW(&msg);
             }
         }
     });
