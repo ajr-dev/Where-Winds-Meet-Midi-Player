@@ -37,9 +37,6 @@
     }
   },
   "bundle": {
-    "active": true,
-    "windows": {
-      "allowDowngrades": true
-    }
+    "active": false
   }
 }
